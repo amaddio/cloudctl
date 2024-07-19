@@ -2,7 +2,9 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 
@@ -14,20 +16,41 @@ import (
 	"k8s.io/client-go/util/homedir"
 )
 
-var kubeconfig string
+var kubeConfigPath string
 var config *rest.Config
 var clientset *kubernetes.Clientset
 
+func doesKubeConfigExist(path string) bool {
+	file, err := os.Open(path)
+	defer file.Close()
+	if err == nil {
+		return true
+	} else {
+		if errors.Is(err, fs.ErrNotExist) {
+			fmt.Println("configuration does not exist at:", path)
+		} else {
+			fmt.Println("file exists but can not be opened:", err)
+		}
+		return false
+	}
+}
+
 func init() {
 	if home := homedir.HomeDir(); home != "" {
-		kubeconfig = filepath.Join(home, ".kube", "config")
+		kubeConfigPath = filepath.Join(home, ".kube", "config")
 	} else {
-		kubeconfig = ""
+		kubeConfigPath = ""
+	}
+	configNotFound := fmt.Errorf("🔥 no kubeconfig found at %s. ➡️ Configure your cluster and restart program", kubeConfigPath)
+
+	if !doesKubeConfigExist(kubeConfigPath) {
+		fmt.Println(configNotFound)
+		os.Exit(1)
 	}
 
-	// Build the kubeconfig
+	// Build the kubeConfigPath
 	var err error
-	config, err = clientcmd.BuildConfigFromFlags("", kubeconfig)
+	config, err = clientcmd.BuildConfigFromFlags("", kubeConfigPath)
 	if err != nil {
 		fmt.Printf("Error building kubeconfig: %v\n", err)
 		os.Exit(1)
@@ -45,7 +68,6 @@ func main() {
 	rootCmd := &cobra.Command{
 		Use:   "cloudctl",
 		Short: "cloudctl is a CLI for interacting with Kubernetes clusters",
-		Long:  `A longer description for cloudctl CLI to interact with Kubernetes clusters.`,
 	}
 
 	// Add subcommands
