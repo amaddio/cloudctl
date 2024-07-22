@@ -4,16 +4,16 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io/fs"
-	"k8s.io/client-go/tools/clientcmd"
-	"os"
-	"path/filepath"
-
 	"github.com/spf13/cobra"
+	"io/fs"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/util/homedir"
+	"os"
+	"path/filepath"
+	"time"
 )
 
 var KubeConfigPath string
@@ -101,7 +101,24 @@ func getPods() {
 		return
 	}
 
+	// add header
+	printFormat := "%-14v %-41v %-8v %-10v %-11v %-3vh\n"
+	fmt.Printf(printFormat, "NAMESPACE", "NAME", "READY", "STATUS", "RESTARTS", "AGE")
+	// add row per pod
 	for _, pod := range pods.Items {
-		fmt.Printf("Namespace: %s, Name: %s\n", pod.Namespace, pod.Name)
+		//prettyPrint("debugfile", pod)
+		containerRestarts := int32(0)
+		lengthOfContainerStatuses := len(pod.Status.ContainerStatuses)
+		ageOfContainer := "unknown"
+		readyStatus := "0/1"
+		if lengthOfContainerStatuses > 0 {
+			containerRestarts = pod.Status.ContainerStatuses[lengthOfContainerStatuses-1].RestartCount
+			lastContainerStartTime := pod.Status.ContainerStatuses[lengthOfContainerStatuses-1].State.Running.StartedAt.Time
+			ageOfContainer = fmt.Sprintf("%v", int(time.Now().Sub(lastContainerStartTime).Hours()))
+			if pod.Status.ContainerStatuses[lengthOfContainerStatuses-1].Ready {
+				readyStatus = "1/1"
+			}
+		}
+		fmt.Printf(printFormat, pod.Namespace, pod.Name, readyStatus, pod.Status.Phase, containerRestarts, ageOfContainer)
 	}
 }
